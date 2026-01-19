@@ -122,6 +122,7 @@ WITH ProductSales AS (
     JOIN Order_Items oi ON p.product_id = oi.product_id
     GROUP BY p.category, p.product_name
 )
+
 SELECT 
     category,
     product_name,
@@ -145,8 +146,7 @@ ORDER BY c.customer_id, o.order_date;
 -- 4. PERFORMANCE OPTIMIZATION (Views & Stored Procedures)
 -- =============================================
 
--- View: CustomerSalesSummary
--- Pre-calculate total amount spent by each customer.
+-- View: CustomerSalesSummary (total amount spent by each customer)
 CREATE OR REPLACE VIEW CustomerSalesSummary AS
 SELECT 
     c.customer_id,
@@ -158,59 +158,127 @@ FROM Customers c
 LEFT JOIN Orders o ON c.customer_id = o.customer_id
 GROUP BY c.customer_id, c.full_name, c.email;
 
--- Stored Procedure: ProcessNewOrder
--- Handles stock checking, inventory updates, and order creation transactionally.
+-- Stored Procedure: ProcessNewOrder (Refactored for Batch Processing)
+-- Handles multiple items in a single order (Shopping Cart pattern) using JSON input.
+-- Usage Example: CALL ProcessNewOrder(1, '[{"product_id": 1, "quantity": 2}, {"product_id": 3, "quantity": 1}]');
+
 DROP PROCEDURE IF EXISTS ProcessNewOrder;
 
 DELIMITER //
 
 CREATE PROCEDURE ProcessNewOrder(
     IN p_customer_id INT,
-    IN p_product_id INT,
-    IN p_quantity INT
+    IN p_order_items JSON
 )
 BEGIN
-    DECLARE v_price DECIMAL(10,2);
-    DECLARE v_stock INT;
     DECLARE v_order_id INT;
+    DECLARE v_insufficient_stock INT DEFAULT 0;
+    DECLARE v_customer_exists INT DEFAULT 0;
+    DECLARE v_cart_item_count INT DEFAULT 0;
+    DECLARE v_invalid_product_count INT DEFAULT 0;
+
+    -- 1. Validate Customer Exists
+    SELECT CASE 
+        WHEN EXISTS (SELECT 1 FROM Customers WHERE customer_id = p_customer_id) 
+        THEN 1 ELSE 0
+    END
+    INTO v_customer_exists;
+    
+    IF v_customer_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: Customer ID does not exist.';
+    END IF;
+            
+    -- 2. Create a temporary table and parse JSON data
+    DROP TEMPORARY TABLE IF EXISTS TempCart;
+    CREATE TEMPORARY TABLE TempCart (
+        product_id INT PRIMARY KEY,
+        quantity INT
+    );
+    
+    INSERT INTO TempCart (product_id, quantity)
+    SELECT product_id, quantity
+    FROM JSON_TABLE(
+        p_order_items,
+        "$[*]" COLUMNS(
+            product_id INT PATH "$.product_id",
+            quantity INT PATH "$.quantity"
+        )
+    ) AS jt;
+
+    -- 3. Validate Cart Content
+    SELECT COUNT(*) INTO v_cart_item_count FROM TempCart;
+    
+    IF v_cart_item_count = 0 THEN
+        DROP TEMPORARY TABLE IF EXISTS TempCart;
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: Order contains no items or invalid JSON.';
+    END IF;
+
+    -- 4. Check for Negative Quantities
+    IF EXISTS (SELECT 1 FROM TempCart WHERE quantity <= 0) THEN
+        DROP TEMPORARY TABLE IF EXISTS TempCart;
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: Order items must have a quantity greater than zero.';
+    END IF;
+
+    -- 5. Validate Products match valid Product IDs
+    SELECT COUNT(*) INTO v_invalid_product_count
+    FROM TempCart t
+    LEFT JOIN Products p ON t.product_id = p.product_id
+    WHERE p.product_id IS NULL;
+
+    IF v_invalid_product_count > 0 THEN
+        DROP TEMPORARY TABLE IF EXISTS TempCart;
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: One or more Product IDs in the cart do not exist.';
+    END IF;
 
     -- Start transaction
     START TRANSACTION;
 
-    -- 1. Check current stock and price
-    SELECT quantity_on_hand, price INTO v_stock, v_price
-    FROM Products p
-    JOIN Inventory i ON p.product_id = i.product_id
-    WHERE p.product_id = p_product_id
-    FOR UPDATE; -- Lock the rows to prevent race conditions
+    -- 6. Check for stock availability 
+    -- Locks rows to prevent race conditions
+    SELECT COUNT(*) INTO v_insufficient_stock
+    FROM TempCart t
+    LEFT JOIN Inventory i ON t.product_id = i.product_id
+    WHERE i.product_id IS NULL OR i.quantity_on_hand < t.quantity
+    FOR UPDATE;
 
-    -- 2. Check if enough stock exists
-    IF v_stock >= p_quantity THEN
-        -- a. Reduce Inventory
-        UPDATE Inventory 
-        SET quantity_on_hand = quantity_on_hand - p_quantity
-        WHERE product_id = p_product_id;
-
-        -- b. Create Order Record
+    IF v_insufficient_stock > 0 THEN
+        ROLLBACK;
+        DROP TEMPORARY TABLE IF EXISTS TempCart;
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: Insufficient stock for one or more items.';
+    ELSE
+        -- 7. Create Order Header
         INSERT INTO Orders (customer_id, order_date, total_amount, order_status)
-        VALUES (p_customer_id, NOW(), (v_price * p_quantity), 'Pending');
+        VALUES (p_customer_id, NOW(), 0.00, 'Pending');
         
-        -- Get the generated Order ID
         SET v_order_id = LAST_INSERT_ID();
 
-        -- c. Create Order Item Record
+        -- 8. Insert Order Items
         INSERT INTO Order_Items (order_id, product_id, quantity, price_at_purchase)
-        VALUES (v_order_id, p_product_id, p_quantity, v_price);
+        SELECT 
+            v_order_id, 
+            t.product_id, 
+            t.quantity, 
+            p.price
+        FROM TempCart t
+        JOIN Products p ON t.product_id = p.product_id;
 
-        -- Commit transaction
+        -- 9. Update Inventory
+        UPDATE Inventory i
+        JOIN TempCart t ON i.product_id = t.product_id
+        SET i.quantity_on_hand = i.quantity_on_hand - t.quantity;
+
+        -- 10. Commit
         COMMIT;
+        
         SELECT 'Order processed successfully' AS message, v_order_id AS new_order_id;
-    ELSE
-        -- Not enough stock, rollback
-        ROLLBACK;
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Insufficient stock for product';
     END IF;
+    
+    DROP TEMPORARY TABLE IF EXISTS TempCart;
 END //
 
 DELIMITER ;
