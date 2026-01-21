@@ -2,6 +2,7 @@
 -- Ghanaian-themed realistic test data
 -- Adds 50+ additional records to each table
 
+
 -- =============================================
 -- ADDITIONAL CUSTOMERS 
 -- =============================================
@@ -180,6 +181,82 @@ INSERT INTO Inventory (product_id, quantity_on_hand) VALUES
 
 -- Books (Product IDs 64-68)
 (64, 100), (65, 50), (66, 75), (67, 60), (68, 80);
+
+
+-- =============================================
+-- INVENTORY LOG (AUDIT TRAIL) FOR NEW PRODUCTS
+-- =============================================
+
+INSERT INTO Inventory_Log (product_id, transaction_type, quantity_change, quantity_before, quantity_after, notes, created_by, created_at) VALUES
+-- Electronics (Product IDs 9-28)
+(9, 'RESTOCK', 25, 0, 25, 'Initial stock setup', 'SYSTEM', NOW()),
+(10, 'RESTOCK', 30, 0, 30, 'Initial stock setup', 'SYSTEM', NOW()),
+(11, 'RESTOCK', 15, 0, 15, 'Initial stock setup', 'SYSTEM', NOW()),
+(12, 'RESTOCK', 20, 0, 20, 'Initial stock setup', 'SYSTEM', NOW()),
+(13, 'RESTOCK', 10, 0, 10, 'Initial stock setup', 'SYSTEM', NOW()),
+(14, 'RESTOCK', 12, 0, 12, 'Initial stock setup', 'SYSTEM', NOW()),
+(15, 'RESTOCK', 8, 0, 8, 'Initial stock setup', 'SYSTEM', NOW()),
+(16, 'RESTOCK', 45, 0, 45, 'Initial stock setup', 'SYSTEM', NOW()),
+(17, 'RESTOCK', 35, 0, 35, 'Initial stock setup', 'SYSTEM', NOW()),
+(18, 'RESTOCK', 40, 0, 40, 'Initial stock setup', 'SYSTEM', NOW()),
+(19, 'RESTOCK', 60, 0, 60, 'Initial stock setup', 'SYSTEM', NOW()),
+(20, 'RESTOCK', 50, 0, 50, 'Initial stock setup', 'SYSTEM', NOW()),
+(21, 'RESTOCK', 80, 0, 80, 'Initial stock setup', 'SYSTEM', NOW()),
+(22, 'RESTOCK', 55, 0, 55, 'Initial stock setup', 'SYSTEM', NOW()),
+(23, 'RESTOCK', 30, 0, 30, 'Initial stock setup', 'SYSTEM', NOW()),
+(24, 'RESTOCK', 40, 0, 40, 'Initial stock setup', 'SYSTEM', NOW()),
+(25, 'RESTOCK', 18, 0, 18, 'Initial stock setup', 'SYSTEM', NOW()),
+(26, 'RESTOCK', 15, 0, 15, 'Initial stock setup', 'SYSTEM', NOW()),
+(27, 'RESTOCK', 12, 0, 12, 'Initial stock setup', 'SYSTEM', NOW()),
+(28, 'RESTOCK', 20, 0, 20, 'Initial stock setup', 'SYSTEM', NOW()),
+
+-- Furniture (Product IDs 29-43)
+(29, 'RESTOCK', 10, 0, 10, 'Initial stock setup', 'SYSTEM', NOW()),
+(30, 'RESTOCK', 5, 0, 5, 'Initial stock setup', 'SYSTEM', NOW()),
+(31, 'RESTOCK', 8, 0, 8, 'Initial stock setup', 'SYSTEM', NOW()),
+(32, 'RESTOCK', 20, 0, 20, 'Initial stock setup', 'SYSTEM', NOW()),
+(33, 'RESTOCK', 12, 0, 12, 'Initial stock setup', 'SYSTEM', NOW()),
+(34, 'RESTOCK', 15, 0, 15, 'Initial stock setup', 'SYSTEM', NOW()),
+(35, 'RESTOCK', 25, 0, 25, 'Initial stock setup', 'SYSTEM', NOW()),
+(36, 'RESTOCK', 6, 0, 6, 'Initial stock setup', 'SYSTEM', NOW()),
+(37, 'RESTOCK', 18, 0, 18, 'Initial stock setup', 'SYSTEM', NOW()),
+(38, 'RESTOCK', 22, 0, 22, 'Initial stock setup', 'SYSTEM', NOW()),
+(39, 'RESTOCK', 10, 0, 10, 'Initial stock setup', 'SYSTEM', NOW()),
+(40, 'RESTOCK', 15, 0, 15, 'Initial stock setup', 'SYSTEM', NOW()),
+(41, 'RESTOCK', 30, 0, 30, 'Initial stock setup', 'SYSTEM', NOW()),
+(42, 'RESTOCK', 28, 0, 28, 'Initial stock setup', 'SYSTEM', NOW()),
+(43, 'RESTOCK', 12, 0, 12, 'Initial stock setup', 'SYSTEM', NOW()),
+
+-- Appliances (Product IDs 44-53)
+(44, 'RESTOCK', 8, 0, 8, 'Initial stock setup', 'SYSTEM', NOW()),
+(45, 'RESTOCK', 35, 0, 35, 'Initial stock setup', 'SYSTEM', NOW()),
+(46, 'RESTOCK', 12, 0, 12, 'Initial stock setup', 'SYSTEM', NOW()),
+(47, 'RESTOCK', 15, 0, 15, 'Initial stock setup', 'SYSTEM', NOW()),
+(48, 'RESTOCK', 50, 0, 50, 'Initial stock setup', 'SYSTEM', NOW()),
+(49, 'RESTOCK', 60, 0, 60, 'Initial stock setup', 'SYSTEM', NOW()),
+(50, 'RESTOCK', 40, 0, 40, 'Initial stock setup', 'SYSTEM', NOW()),
+(51, 'RESTOCK', 45, 0, 45, 'Initial stock setup', 'SYSTEM', NOW()),
+(52, 'RESTOCK', 25, 0, 25, 'Initial stock setup', 'SYSTEM', NOW()),
+(53, 'RESTOCK', 38, 0, 38, 'Initial stock setup', 'SYSTEM', NOW()),
+
+-- Apparel (Product IDs 54-63)
+(54, 'RESTOCK', 40, 0, 40, 'Initial stock setup', 'SYSTEM', NOW()),
+(55, 'RESTOCK', 55, 0, 55, 'Initial stock setup', 'SYSTEM', NOW()),
+(56, 'RESTOCK', 70, 0, 70, 'Initial stock setup', 'SYSTEM', NOW()),
+(57, 'RESTOCK', 65, 0, 65, 'Initial stock setup', 'SYSTEM', NOW()),
+(58, 'RESTOCK', 15, 0, 15, 'Initial stock setup', 'SYSTEM', NOW()),
+(59, 'RESTOCK', 80, 0, 80, 'Initial stock setup', 'SYSTEM', NOW()),
+(60, 'RESTOCK', 90, 0, 90, 'Initial stock setup', 'SYSTEM', NOW()),
+(61, 'RESTOCK', 45, 0, 45, 'Initial stock setup', 'SYSTEM', NOW()),
+(62, 'RESTOCK', 50, 0, 50, 'Initial stock setup', 'SYSTEM', NOW()),
+(63, 'RESTOCK', 35, 0, 35, 'Initial stock setup', 'SYSTEM', NOW()),
+
+-- Books (Product IDs 64-68)
+(64, 'RESTOCK', 100, 0, 100, 'Initial stock setup', 'SYSTEM', NOW()),
+(65, 'RESTOCK', 50, 0, 50, 'Initial stock setup', 'SYSTEM', NOW()),
+(66, 'RESTOCK', 75, 0, 75, 'Initial stock setup', 'SYSTEM', NOW()),
+(67, 'RESTOCK', 60, 0, 60, 'Initial stock setup', 'SYSTEM', NOW()),
+(68, 'RESTOCK', 80, 0, 80, 'Initial stock setup', 'SYSTEM', NOW());
 
 
 -- =============================================

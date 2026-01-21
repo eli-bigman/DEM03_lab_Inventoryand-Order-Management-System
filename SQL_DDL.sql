@@ -1,6 +1,7 @@
 -- Database Schema for Inventory and Order Management System
 
 -- Drop tables if they exist to start fresh 
+DROP TABLE IF EXISTS Inventory_Log;
 DROP TABLE IF EXISTS Order_Items;
 DROP TABLE IF EXISTS Orders;
 DROP TABLE IF EXISTS Inventory;
@@ -35,6 +36,8 @@ CREATE TABLE Inventory (
     CONSTRAINT chk_inventory_qty CHECK (quantity_on_hand >= 0)
 );
 
+
+
 -- 4. Create Orders Table
 CREATE TABLE Orders (
     order_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -59,6 +62,26 @@ CREATE TABLE Order_Items (
     CONSTRAINT chk_order_item_price CHECK (price_at_purchase >= 0),
     UNIQUE KEY uq_order_product (order_id, product_id)
 );
+
+-- 3a. Create Inventory_Log Table (Audit Trail)
+CREATE TABLE Inventory_Log (
+    log_id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    transaction_type ENUM('SALE', 'RESTOCK', 'ADJUSTMENT', 'RETURN', 'DAMAGE', 'LOSS') NOT NULL,
+    quantity_change INT NOT NULL COMMENT 'Negative for decreases, positive for increases',
+    quantity_before INT NOT NULL,
+    quantity_after INT NOT NULL,
+    order_id INT NULL COMMENT 'Links to Orders if applicable (for SALE/RETURN)',
+    notes VARCHAR(500) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(100) NULL COMMENT 'User who made the change',
+    CONSTRAINT fk_inventory_log_product FOREIGN KEY (product_id) REFERENCES Products(product_id) ON DELETE CASCADE,
+    CONSTRAINT fk_inventory_log_order FOREIGN KEY (order_id) REFERENCES Orders(order_id) ON DELETE SET NULL,
+    INDEX idx_product_date (product_id, created_at),
+    INDEX idx_transaction_type (transaction_type),
+    INDEX idx_order (order_id)
+);
+
 
 -- Indexes for performance optimization
 CREATE INDEX idx_customer_email ON Customers(email);

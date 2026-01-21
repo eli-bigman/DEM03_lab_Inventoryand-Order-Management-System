@@ -32,6 +32,17 @@ INSERT INTO Inventory (product_id, quantity_on_hand) VALUES
 (7, 60), -- Mouse
 (8, 15); -- Standing Desk
 
+-- Insert Inventory Log (Initial stock entries)
+INSERT INTO Inventory_Log (product_id, transaction_type, quantity_change, quantity_before, quantity_after, notes, created_by, created_at) VALUES
+(1, 'RESTOCK', 50, 0, 50, 'Initial stock - Laptop Pro', 'SYSTEM', '2023-09-15 08:00:00'),
+(2, 'RESTOCK', 100, 0, 100, 'Initial stock - Wireless Headphones', 'SYSTEM', '2023-09-15 08:00:00'),
+(3, 'RESTOCK', 20, 0, 20, 'Initial stock - Ergonomic Chair', 'SYSTEM', '2023-09-15 08:00:00'),
+(4, 'RESTOCK', 30, 0, 30, 'Initial stock - Coffee Maker', 'SYSTEM', '2023-09-15 08:00:00'),
+(5, 'RESTOCK', 75, 0, 75, 'Initial stock - Running Shoes', 'SYSTEM', '2023-09-15 08:00:00'),
+(6, 'RESTOCK', 200, 0, 200, 'Initial stock - Python Programming', 'SYSTEM', '2023-09-15 08:00:00'),
+(7, 'RESTOCK', 60, 0, 60, 'Initial stock - Gaming Mouse', 'SYSTEM', '2023-09-15 08:00:00'),
+(8, 'RESTOCK', 15, 0, 15, 'Initial stock - Standing Desk', 'SYSTEM', '2023-09-15 08:00:00');
+
 -- Insert Orders (Some historical data)
 INSERT INTO Orders (customer_id, order_date, total_amount, order_status) VALUES
 (1, '2023-10-01 10:00:00', 1350.00, 'Delivered'),
@@ -268,17 +279,102 @@ BEGIN
         JOIN Products p ON t.product_id = p.product_id;
 
         -- 9. Update Inventory
+        -- Disable trigger to prevent duplicate log entry
+        SET @disable_inventory_log = 1;
+        
         UPDATE Inventory i
         JOIN TempCart t ON i.product_id = t.product_id
         SET i.quantity_on_hand = i.quantity_on_hand - t.quantity;
 
+        -- 9a. Log Inventory Changes
+        INSERT INTO Inventory_Log (product_id, transaction_type, quantity_change, 
+                                   quantity_before, quantity_after, order_id, created_by, notes)
+        SELECT 
+            i.product_id,
+            'SALE',
+            -t.quantity,
+            i.quantity_on_hand + t.quantity, -- before deduction
+            i.quantity_on_hand,              -- after deduction
+            v_order_id,
+            COALESCE(USER(), 'SYSTEM'),
+            CONCAT('Order #', v_order_id, ' - ', p.product_name)
+        FROM Inventory i
+        JOIN TempCart t ON i.product_id = t.product_id
+        JOIN Products p ON i.product_id = p.product_id;
+
         -- 10. Commit
+        SET @disable_inventory_log = 0; -- Re-enable trigger
         COMMIT;
         
         SELECT 'Order processed successfully' AS message, v_order_id AS new_order_id;
     END IF;
     
     DROP TEMPORARY TABLE IF EXISTS TempCart;
+END //
+
+DELIMITER ;
+
+-- Stored Procedure: RestockInventory
+-- Adds inventory and logs the restock transaction
+-- Usage Example: CALL RestockInventory(1, 50, 'Received shipment from supplier XYZ');
+
+DROP PROCEDURE IF EXISTS RestockInventory;
+
+DELIMITER //
+
+CREATE PROCEDURE RestockInventory(
+    IN p_product_id INT,
+    IN p_quantity INT,
+    IN p_notes VARCHAR(500)
+)
+BEGIN
+    DECLARE v_old_quantity INT;
+    DECLARE v_product_exists INT DEFAULT 0;
+    
+    -- Validate product exists
+    SELECT CASE 
+        WHEN EXISTS (SELECT 1 FROM Products WHERE product_id = p_product_id) 
+        THEN 1 ELSE 0
+    END
+    INTO v_product_exists;
+    
+    IF v_product_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: Product ID does not exist.';
+    END IF;
+    
+    -- Validate positive quantity
+    IF p_quantity <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: Restock quantity must be greater than zero.';
+    END IF;
+    
+    START TRANSACTION;
+    
+    -- Disable trigger to prevent duplicate log entry
+    SET @disable_inventory_log = 1;
+    
+    -- Get current quantity
+    SELECT quantity_on_hand INTO v_old_quantity
+    FROM Inventory 
+    WHERE product_id = p_product_id 
+    FOR UPDATE;
+    
+    -- Update inventory
+    UPDATE Inventory 
+    SET quantity_on_hand = quantity_on_hand + p_quantity
+    WHERE product_id = p_product_id;
+    
+    -- Log the restock
+    INSERT INTO Inventory_Log 
+    (product_id, transaction_type, quantity_change, quantity_before, quantity_after, notes, created_by)
+    VALUES 
+    (p_product_id, 'RESTOCK', p_quantity, v_old_quantity, v_old_quantity + p_quantity, p_notes, COALESCE(USER(), 'SYSTEM'));
+    
+    SET @disable_inventory_log = 0; -- Re-enable trigger
+    COMMIT;
+    
+    SELECT 'Inventory restocked successfully' AS message, p_product_id AS product_id, p_quantity AS quantity_added;
 END //
 
 DELIMITER ;
@@ -293,6 +389,7 @@ DELIMITER ;
 DROP TRIGGER IF EXISTS trg_update_order_total_after_insert;
 DROP TRIGGER IF EXISTS trg_update_order_total_after_update;
 DROP TRIGGER IF EXISTS trg_update_order_total_after_delete;
+DROP TRIGGER IF EXISTS after_inventory_update;
 
 DELIMITER //
 
@@ -336,6 +433,82 @@ BEGIN
         WHERE order_id = OLD.order_id
     )
     WHERE order_id = OLD.order_id;
+END //
+
+DELIMITER ;
+
+
+DELIMITER //
+
+-- Trigger 1: After inserting a new inventory record (Initial Stock)
+CREATE TRIGGER after_inventory_insert
+AFTER INSERT ON Inventory
+FOR EACH ROW
+BEGIN
+    INSERT INTO Inventory_Log (
+        product_id,
+        transaction_type,
+        quantity_change,
+        quantity_before,
+        quantity_after,
+        notes,
+        created_by,
+        created_at
+    ) VALUES (
+        NEW.product_id,
+        'RESTOCK',
+        NEW.quantity_on_hand,
+        0,
+        NEW.quantity_on_hand,
+        'Initial inventory insert',
+        'SYSTEM',
+        NOW()
+    );
+END //
+
+-- Trigger 2: After updating inventory quantity (Stock changes)
+DROP TRIGGER IF EXISTS after_inventory_update;
+
+CREATE TRIGGER after_inventory_update
+AFTER UPDATE ON Inventory
+FOR EACH ROW
+BEGIN
+    DECLARE trans_type VARCHAR(20);
+    DECLARE note VARCHAR(500);
+    
+    -- Only log if quantity actually changed AND triggers are not temporarily disabled
+    IF NEW.quantity_on_hand != OLD.quantity_on_hand AND (@disable_inventory_log IS NULL OR @disable_inventory_log = 0) THEN
+        
+        -- Determine transaction type based on context
+        -- Ideally, the application should pass context, but for a simple trigger:
+        IF NEW.quantity_on_hand > OLD.quantity_on_hand THEN
+            SET trans_type = 'RESTOCK';
+            SET note = 'Stock level increased';
+        ELSE
+            SET trans_type = 'SALE'; -- Default assumption for decrease
+            SET note = 'Stock level decreased';
+        END IF;
+
+        INSERT INTO Inventory_Log (
+            product_id,
+            transaction_type,
+            quantity_change,
+            quantity_before,
+            quantity_after,
+            notes,
+            created_by,
+            created_at
+        ) VALUES (
+            NEW.product_id,
+            trans_type,
+            NEW.quantity_on_hand - OLD.quantity_on_hand,
+            OLD.quantity_on_hand,
+            NEW.quantity_on_hand,
+            note,
+            'SYSTEM',
+            NOW()
+        );
+    END IF;
 END //
 
 DELIMITER ;
